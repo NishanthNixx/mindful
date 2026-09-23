@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -35,7 +36,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
   bool _loading = true;
   bool _saving = false;
 
-  late DateTime _createdAt = DateTime.now();
+  late DateTime _createdAt = clock.now();
   int? _mood;
   double? _sleep;
   List<String> _symptoms = [];
@@ -143,7 +144,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
       context: context,
       initialDate: _createdAt,
       firstDate: DateTime(2000),
-      lastDate: DateTime.now(),
+      lastDate: clock.now(),
     );
     if (date == null || !mounted) return;
     final time = await showTimePicker(
@@ -300,7 +301,7 @@ class _EntryEditorScreenState extends ConsumerState<EntryEditorScreen> {
                             const SizedBox(width: 6),
                             Flexible(
                               child: Text(
-                                DateTime.now().difference(_createdAt).inDays < 6
+                                clock.now().difference(_createdAt).inDays < 6
                                     ? relativeTimestamp(_createdAt)
                                     : DateFormat(
                                         'EEE d MMM, ',

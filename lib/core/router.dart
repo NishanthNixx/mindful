@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:mindfull/presentation/ask/ask_screen.dart';
 import 'package:mindfull/presentation/entry/entry_editor_screen.dart';
 import 'package:mindfull/presentation/home_shell.dart';
+import 'package:mindfull/presentation/models/model_manager_screen.dart';
 import 'package:mindfull/presentation/onboarding/welcome_screen.dart';
 import 'package:mindfull/presentation/settings/app_lock_setup_screen.dart';
 import 'package:mindfull/presentation/settings/privacy_screen.dart';
@@ -20,6 +21,7 @@ abstract final class Routes {
   static const settings = '/settings';
   static const privacy = '/settings/privacy';
   static const lockSetup = '/settings/lock';
+  static const models = '/settings/models';
 }
 
 GoRouter buildRouter({required bool onboarded}) => GoRouter(
@@ -66,6 +68,11 @@ GoRouter buildRouter({required bool onboarded}) => GoRouter(
                   path: 'privacy',
                   parentNavigatorKey: _rootKey,
                   builder: (_, _) => const PrivacyScreen(),
+                ),
+                GoRoute(
+                  path: 'models',
+                  parentNavigatorKey: _rootKey,
+                  builder: (_, _) => const ModelManagerScreen(),
                 ),
                 GoRoute(
                   path: 'lock',

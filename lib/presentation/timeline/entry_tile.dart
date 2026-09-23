@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mindfull/core/theme.dart';
@@ -7,7 +8,7 @@ import 'package:mindfull/presentation/shared/paper_card.dart';
 import 'package:mindfull/presentation/shared/pill.dart';
 
 String relativeTimestamp(DateTime t, {DateTime? now}) {
-  final n = now ?? DateTime.now();
+  final n = now ?? clock.now();
   final today = DateTime(n.year, n.month, n.day);
   final day = DateTime(t.year, t.month, t.day);
   final diff = today.difference(day).inDays;

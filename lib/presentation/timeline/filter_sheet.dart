@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -21,7 +22,7 @@ enum DatePreset {
 }
 
 DateTime _today() {
-  final n = DateTime.now();
+  final n = clock.now();
   return DateTime(n.year, n.month, n.day);
 }
 
@@ -82,7 +83,7 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
           ),
         );
       case DatePreset.custom:
-        final now = DateTime.now();
+        final now = clock.now();
         final range = await showDateRangePicker(
           context: context,
           firstDate: DateTime(2000),

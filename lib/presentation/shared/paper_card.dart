@@ -90,11 +90,16 @@ class SectionLabel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
       child: Row(
         children: [
-          Text(
-            text.toUpperCase(),
-            style: theme.textTheme.labelSmall?.copyWith(
-              letterSpacing: 1.2,
-              fontWeight: FontWeight.w600,
+          Flexible(
+            flex: 3,
+            child: Text(
+              text.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(
+                letterSpacing: 1.2,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           const SizedBox(width: 12),

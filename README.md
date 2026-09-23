@@ -2,15 +2,16 @@
 
 An offline, private health and wellness journal for iOS and Android, built with Flutter. You log mood, symptoms, medication, sleep and notes, typed or dictated. Everything stays on the phone in an encrypted database, and the app works in airplane mode.
 
-The next stage adds a language model (Gemma) that runs **entirely on the device**. It will answer questions about the journal ("When did my headaches start getting worse?"), cite the entries it used, and write a summary for a doctor's visit. No health data is sent to a server.
+A language model (Gemma 4 E2B) runs **entirely on the device**. Today it powers a private chat. Next it will answer questions about the journal ("When did my headaches start getting worse?"), cite the entries it used, and write a summary for a doctor's visit. No health data is sent to a server.
 
 > Mindfull is a personal wellness journal, **not medical advice**. It does not diagnose or treat any condition.
 
 <p>
-  <img src="test/goldens/screens/journal_plain.png" width="200" alt="Journal timeline">
-  <img src="test/goldens/screens/entry_nature.png" width="200" alt="New entry with nature background">
-  <img src="test/goldens/screens/settings_plain.png" width="200" alt="Settings and privacy">
-  <img src="test/goldens/screens/journal_dark.png" width="200" alt="Journal in dark mode">
+  <img src="test/goldens/screens/journal_plain.png" width="190" alt="Journal timeline">
+  <img src="test/goldens/screens/entry_nature.png" width="190" alt="New entry with nature background">
+  <img src="test/goldens/screens/ask_chat.png" width="190" alt="On-device chat with Gemma 4 E2B">
+  <img src="test/goldens/screens/model_manager.png" width="190" alt="Model manager">
+  <img src="test/goldens/screens/journal_dark.png" width="190" alt="Journal in dark mode">
 </p>
 
 ## Status
@@ -18,8 +19,8 @@ The next stage adds a language model (Gemma) that runs **entirely on the device*
 | Week | Scope | State |
 |---|---|---|
 | 1 | Journal CRUD, encrypted DB, timeline, app lock, UI | ✅ Done |
-| 2 | Model manager (device check, resumable download, checksum), first streamed Gemma chat | Next |
-| 3 | On-device embeddings, local retrieval, "Ask your journal" with citations | Planned |
+| 2 | Model manager (device check, resumable download, checksum), first streamed Gemma chat | ✅ On iPhone 17 Pro; second device pending |
+| 3 | On-device embeddings, local retrieval, "Ask your journal" with citations | Next |
 | 4 | Function calling with approval cards, reminders, weekly summary | Planned |
 | 5 | Benchmarks, evaluation set, doctor-visit PDF, release | Planned |
 
@@ -33,6 +34,26 @@ The next stage adds a language model (Gemma) that runs **entirely on the device*
 - **App lock:** a PIN, stored as a salted PBKDF2 hash, plus Face ID or fingerprint. Repeated wrong PINs trigger a lockout that grows longer each time.
 - **Screen privacy:** the app is blurred in the app switcher, and Android blocks screenshots.
 - **Appearance:** light, dark or follow the system, with optional nature photo backgrounds. The fonts are bundled, so nothing is fetched at runtime.
+- **Model manager:** reads the phone's RAM and free storage, then recommends a model (table below). Downloads resume from the bytes already on disk after a pause, a dropped connection or the app being killed, using HTTP `Range` requests. Every file is checked against its published SHA-256 before use. You get a warning before downloading on mobile data, a storage check before starting, and a remove option. The "Offline" badge changes only while a download is running.
+- **On-device chat:** answers stream token by token, and **Stop** halts generation natively. Each answer shows time to first token and decode tokens/sec, counted with the model's own tokenizer. The model loads into memory only the first time you open Ask, so launches stay fast for people who only journal.
+
+## On-device models
+
+| Model | File | Size | Offered when | Licence |
+|---|---|---|---|---|
+| Gemma 4 E2B | `gemma-4-E2B-it.litertlm` | 2.4 GB | about 6 GB RAM or more (GPU) | Apache 2.0 |
+| Qwen3 0.6B | `Qwen3-0.6B.litertlm` | 586 MB | about 3 GB RAM or more (CPU) | Apache 2.0 |
+| — | — | — | under 3 GB: AI turns off; the journal still works | — |
+
+Neither model requires a Hugging Face token. The RAM thresholds sit about 10% below the advertised size, because phones report slightly less (an "8 GB" iPhone reports about 7.45 GiB).
+
+## Benchmarks
+
+| Device | Model | Backend | Time to first token | Decode | Build |
+|---|---|---|---|---|---|
+| iPhone 17 Pro (12 GB) | Gemma 4 E2B | GPU | 0.1 s | 37.3 tok/s | debug, single prompt |
+
+These are early single runs. Week 5 adds a benchmark screen that averages repeated prompts in a profile build and records peak RAM and battery use per 10 prompts, on a budget Android phone as well as a flagship.
 
 ## Architecture
 
@@ -49,7 +70,8 @@ lib/
 
 - **State and navigation:** Riverpod 3 and go_router.
 - **Storage:** drift, with SQLCipher bundled through `package:sqlite3` build hooks (`hooks.user_defines.sqlite3.source: sqlcipher` in `pubspec.yaml`).
-- **AI:** `LlmEngine`, `Embedder` and `Retriever` are interfaces today. Every AI screen shows a clear "model not ready" state, so the app is fully usable before a model is downloaded.
+- **AI:** `GemmaLlmEngine` (flutter_gemma 0.16 on LiteRT-LM) implements the `LlmEngine` interface. The downloaded, verified file is registered where it sits, not copied. `ModelManager` runs the lifecycle as a state machine: not installed → downloading or paused → verifying → installed → loading → ready, or failed or unsupported. Every AI screen renders from that state, so the app is fully usable before a model is downloaded.
+- **Native code:** a small `mindfull/device` platform channel (Swift and Kotlin) reports total RAM and free storage, and on iOS excludes model files from iCloud backup. The iOS app has the Increased Memory Limit and Extended Virtual Addressing entitlements, so large models can load.
 
 ## Running it
 
@@ -76,6 +98,9 @@ The tests cover these behaviours:
 - PBKDF2 matches a published test vector (RFC 7914), and PIN lockout escalates.
 - Entry filtering, and tags matched regardless of capitalisation.
 - The full flows: create, edit and delete entries, dictation, app lock, the app-switcher shield, and theme switching.
+- Model downloads against a local HTTP server: redirects, Range resume, servers that ignore Range, 404s, stalled connections and pause.
+- The model lifecycle: a wrong checksum deletes the file, low storage is refused, a download resumes after a restart, the model loads lazily, and a failed load is reported instead of crashing.
+- The chat: streaming, Stop reaching the engine, new chat, and the model-manager route.
 
 ## Privacy model (summary)
 
@@ -84,7 +109,8 @@ The tests cover these behaviours:
 | Journal entries, tags | SQLCipher database in the app's private storage |
 | Database key | Keychain / Keystore, bound to this device, not included in backups |
 | PIN | Only a salted PBKDF2-SHA256 hash, in the Keychain / Keystore |
-| Network | None for journal data. The only planned network use is the model download, which the user starts. |
+| Network | None for journal data. The only network use is the model download from Hugging Face, which the user starts. |
+| Model file | App-private storage, excluded from iCloud backup, never visible in the Files app |
 
 What this can't protect against: someone who has your unlocked phone while Mindfull is open. The app lock adds a second barrier. A full threat model will be added in week 5.
 

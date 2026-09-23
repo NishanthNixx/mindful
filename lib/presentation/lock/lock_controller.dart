@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mindfull/core/providers.dart';
 
@@ -23,13 +24,13 @@ class LockController extends Notifier<AppLockState> {
     state = enabled ? AppLockState.locked : AppLockState.unlocked;
   }
 
-  void onBackgrounded() => _backgroundedAt ??= DateTime.now();
+  void onBackgrounded() => _backgroundedAt ??= clock.now();
 
   Future<void> onResumed() async {
     final at = _backgroundedAt;
     _backgroundedAt = null;
     if (at == null || state != AppLockState.unlocked) return;
-    if (DateTime.now().difference(at) >= grace &&
+    if (clock.now().difference(at) >= grace &&
         await ref.read(appLockServiceProvider).isEnabled()) {
       state = AppLockState.locked;
     }

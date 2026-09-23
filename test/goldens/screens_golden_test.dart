@@ -3,10 +3,12 @@ library;
 
 import 'dart:io';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mindfull/data/repositories/drift_journal_repo.dart';
+import 'package:mindfull/domain/ai/model_spec.dart';
 import 'package:mindfull/domain/entities/journal_entry.dart';
 
 import '../helpers.dart';
@@ -48,8 +50,18 @@ Future<void> _loadFonts() async {
   }
 }
 
+/// Screens show "Today, 9:15 AM", the month, etc. Freeze time so goldens don't
+/// change from day to day.
+final _now = DateTime(2026, 9, 23, 14, 52);
+
+void _frozen(String description, Future<void> Function(WidgetTester) body) =>
+    testWidgets(
+      description,
+      (tester) => withClock(Clock.fixed(_now), () => body(tester)),
+    );
+
 List<JournalEntry> _sample() {
-  final now = DateTime.now();
+  final now = _now;
   DateTime at(int daysAgo, int h, [int m = 0]) =>
       DateTime(now.year, now.month, now.day - daysAgo, h, m);
   return [
@@ -157,14 +169,14 @@ void main() {
     ('nature', true, Brightness.light),
     ('dark', false, Brightness.dark),
   ]) {
-    testWidgets('journal · $label', (tester) async {
+    _frozen('journal · $label', (tester) async {
       final app = TestApp();
       addTearDown(app.db.close);
       await _pumpApp(tester, app, nature: nature, brightness: brightness);
       await _snap(tester, 'journal_$label');
     });
 
-    testWidgets('new entry · $label', (tester) async {
+    _frozen('new entry · $label', (tester) async {
       final app = TestApp();
       addTearDown(app.db.close);
       await _pumpApp(tester, app, nature: nature, brightness: brightness);
@@ -176,7 +188,7 @@ void main() {
       await _snap(tester, 'entry_$label');
     });
 
-    testWidgets('ask · $label', (tester) async {
+    _frozen('ask · $label', (tester) async {
       final app = TestApp();
       addTearDown(app.db.close);
       await _pumpApp(tester, app, nature: nature, brightness: brightness);
@@ -185,7 +197,7 @@ void main() {
       await _snap(tester, 'ask_$label');
     });
 
-    testWidgets('settings · $label', (tester) async {
+    _frozen('settings · $label', (tester) async {
       final app = TestApp();
       addTearDown(app.db.close);
       await _pumpApp(tester, app, nature: nature, brightness: brightness);
@@ -198,7 +210,49 @@ void main() {
     });
   }
 
-  testWidgets('lock screen', (tester) async {
+  _frozen('model manager', (tester) async {
+    final app = TestApp();
+    addTearDown(app.db.close);
+    await _pumpApp(tester, app);
+    await tester.tap(find.text('Settings'));
+    await settle(tester);
+    await tester.tap(find.text('No model installed'));
+    await settle(tester);
+    await _snap(tester, 'model_manager');
+  });
+
+  _frozen('ask chat', (tester) async {
+    final app = TestApp();
+    addTearDown(app.db.close);
+    File(
+      '${app.modelsDir.path}/${ModelCatalog.gemma4E2b.fileName}',
+    ).writeAsBytesSync([1]);
+    app.storage.data['model_installed_id'] = ModelCatalog.gemma4E2b.id;
+    await _pumpApp(tester, app);
+    await tester.tap(find.text('Ask'));
+    await settle(tester);
+    await tester.enterText(
+      find.byType(TextField),
+      'Give me tips to clear brain fog',
+    );
+    await tester.tap(find.byTooltip('Send'));
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    final session = app.engine.sessions.single
+      ..emit('A few gentle things that often help:\n\n')
+      ..emit('• Drink a glass of water — mild dehydration dulls focus.\n')
+      ..emit('• Step outside for ten minutes of daylight and a slow walk.\n')
+      ..emit('• Work in short blocks with real breaks, away from screens.\n\n')
+      ..emit(
+        'If the fog lasts for weeks or comes with other symptoms, it is worth mentioning to your doctor.',
+      );
+    await session.finish();
+    await settle(tester);
+    await _snap(tester, 'ask_chat');
+  });
+
+  _frozen('lock screen', (tester) async {
     final app = TestApp();
     addTearDown(app.db.close);
     app.storage.data['lock_pin_hash'] = 'x';
@@ -206,7 +260,7 @@ void main() {
     await _snap(tester, 'lock');
   });
 
-  testWidgets('welcome', (tester) async {
+  _frozen('welcome', (tester) async {
     final app = TestApp(onboarded: false);
     addTearDown(app.db.close);
     await _pumpApp(tester, app);

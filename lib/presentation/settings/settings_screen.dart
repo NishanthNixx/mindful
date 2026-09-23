@@ -414,20 +414,51 @@ class _ModelCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final (title, subtitle) = switch (status) {
-      ModelReady(:final modelId) => (modelId, 'Running on this phone'),
-      ModelDownloading(:final progress) => (
-        'Downloading model',
-        '${(progress * 100).round()}% · you can keep journaling',
+    final (title, subtitle, active) = switch (status) {
+      ModelReady(:final model) => (
+        model.displayName,
+        'Loaded and running on this phone',
+        true,
       ),
-      ModelUnsupported(:final reason) => ('On-device AI is off', reason),
+      ModelInstalled(:final model) => (
+        model.displayName,
+        'Installed · loads when you open Ask',
+        true,
+      ),
+      ModelLoading(:final model) => (
+        model.displayName,
+        'Loading into memory…',
+        true,
+      ),
+      ModelDownloading(:final model, :final progress, :final paused) => (
+        model.displayName,
+        paused
+            ? 'Download paused at ${(progress * 100).round()}%'
+            : 'Downloading… ${(progress * 100).round()}%',
+        false,
+      ),
+      ModelVerifying(:final model) => (
+        model.displayName,
+        'Verifying the download…',
+        false,
+      ),
+      ModelFailed(:final model, :final message) => (
+        model?.displayName ?? 'On-device AI',
+        message,
+        false,
+      ),
+      ModelUnsupported(:final reason) => ('On-device AI is off', reason, false),
       ModelNotInstalled() => (
         'No model installed',
-        'Download a small AI model to ask questions about your journal.',
+        'Download a small AI model to ask questions privately, on this phone.',
+        false,
       ),
     };
     return PaperCard(
       padding: const EdgeInsets.all(20),
+      onTap: status is ModelUnsupported
+          ? null
+          : () => context.push(Routes.models),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -438,26 +469,31 @@ class _ModelCard extends StatelessWidget {
                 height: 10,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: status is ModelReady
-                      ? scheme.secondary
-                      : scheme.outlineVariant,
+                  color: active ? scheme.secondary : scheme.outlineVariant,
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(child: Text(title, style: theme.textTheme.titleMedium)),
+              if (status is! ModelUnsupported) const Icon(Icons.chevron_right),
             ],
           ),
           const SizedBox(height: 6),
           Text(subtitle, style: theme.textTheme.bodySmall),
-          if (status case ModelDownloading(:final progress)) ...[
+          if (status
+              case ModelDownloading(:final progress) ||
+                  ModelVerifying(:final progress)) ...[
             const SizedBox(height: 12),
             LinearProgressIndicator(value: progress),
           ],
-          const SizedBox(height: 12),
-          const OutlinedButton(
-            onPressed: null, // Week 2: model manager.
-            child: Text('Manage models (coming soon)'),
-          ),
+          if (status is! ModelUnsupported) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Manage models & storage',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: scheme.secondary,
+              ),
+            ),
+          ],
         ],
       ),
     );

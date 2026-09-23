@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -94,7 +95,7 @@ class _Body extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final now = DateTime.now();
+    final now = clock.now();
     final tomorrow = DateTime(now.year, now.month, now.day + 1);
     final start = filter.from ?? presetStart(30);
     final end = filter.to ?? tomorrow;

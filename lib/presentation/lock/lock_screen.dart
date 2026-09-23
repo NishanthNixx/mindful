@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -53,7 +54,7 @@ class _LockScreenState extends ConsumerState<LockScreen> {
     _ticker?.cancel();
     setState(() => _lockedOutUntil = until);
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (DateTime.now().isAfter(until)) {
+      if (clock.now().isAfter(until)) {
         _ticker?.cancel();
         setState(() {
           _lockedOutUntil = null;
@@ -88,7 +89,7 @@ class _LockScreenState extends ConsumerState<LockScreen> {
   @override
   Widget build(BuildContext context) {
     final until = _lockedOutUntil;
-    final remaining = until?.difference(DateTime.now());
+    final remaining = until?.difference(clock.now());
     return Material(
       color: MindfullTokens.of(context).canvas,
       child: SafeArea(

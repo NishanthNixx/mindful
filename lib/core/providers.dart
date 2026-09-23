@@ -1,17 +1,28 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show StreamProviderFamily;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:mindfull/data/ai/gemma_llm_engine.dart';
+import 'package:mindfull/data/ai/model_manager.dart';
+import 'package:mindfull/data/ai/platform_device_info.dart';
 import 'package:mindfull/data/db/app_database.dart';
 import 'package:mindfull/data/repositories/drift_journal_repo.dart';
 import 'package:mindfull/data/security/app_lock_service.dart';
 import 'package:mindfull/data/speech/device_speech_input.dart';
+import 'package:mindfull/domain/ai/llm_engine.dart';
 import 'package:mindfull/domain/ai/model_status.dart';
 import 'package:mindfull/domain/entities/entry_filter.dart';
 import 'package:mindfull/domain/entities/journal_entry.dart';
 import 'package:mindfull/domain/entities/tag.dart';
 import 'package:mindfull/domain/repositories/journal_repo.dart';
+import 'package:mindfull/domain/services/device_info.dart';
 import 'package:mindfull/domain/services/speech_input.dart';
 import 'package:mindfull/domain/usecases/log_entry.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 // ---- Infrastructure (overridden in main() after async bootstrap) ----
 
@@ -37,17 +48,64 @@ final appLockServiceProvider = Provider<AppLockService>(
 
 final speechInputProvider = Provider<SpeechInput>((ref) => DeviceSpeechInput());
 
-// ---- AI (week 2+: backed by ModelManager / flutter_gemma) ----
+// ---- On-device AI ----
 
-/// Until the model manager lands, the model is simply not installed. Every AI
-/// surface renders from this, so the journal is fully usable without a model.
-final modelStatusProvider = Provider<ModelStatus>(
-  (ref) => const ModelNotInstalled(),
+final deviceInfoProvider = Provider<DeviceInfoSource>(
+  (ref) => const PlatformDeviceInfo(),
 );
 
-/// True while the app is making a network request (only model downloads, and
-/// only when the user starts one). Drives the "Network: Off" indicator.
-final networkInUseProvider = Provider<bool>((ref) => false);
+final llmEngineProvider = Provider<LlmEngine>((ref) => GemmaLlmEngine());
+
+final modelManagerProvider = Provider<ModelManager>((ref) {
+  final manager = ModelManager(
+    engine: ref.watch(llmEngineProvider),
+    deviceInfo: ref.watch(deviceInfoProvider),
+    storage: ref.watch(secureStorageProvider),
+    modelsDir: () async => Directory(
+      p.join((await getApplicationSupportDirectory()).path, 'models'),
+    ),
+  );
+  unawaited(manager.restore());
+  ref.onDispose(manager.dispose);
+  return manager;
+});
+
+/// Every AI surface renders from this, so the journal is fully usable
+/// without a model.
+class ModelStatusNotifier extends Notifier<ModelStatus> {
+  @override
+  ModelStatus build() {
+    final manager = ref.watch(modelManagerProvider);
+    void sync() => state = manager.value;
+    manager.addListener(sync);
+    ref.onDispose(() => manager.removeListener(sync));
+    return manager.value;
+  }
+}
+
+final modelStatusProvider = NotifierProvider<ModelStatusNotifier, ModelStatus>(
+  ModelStatusNotifier.new,
+);
+
+/// True only while a model download is transferring. Drives the "Offline"
+/// badge; nothing else in the app uses the network.
+final networkInUseProvider = Provider<bool>(
+  (ref) => switch (ref.watch(modelStatusProvider)) {
+    ModelDownloading(paused: false) => true,
+    _ => false,
+  },
+);
+
+/// Whether the only connection is mobile data (warn before a big download).
+final onMobileDataProvider = Provider<Future<bool> Function()>(
+  (ref) => () async {
+    final links = await Connectivity().checkConnectivity();
+    final unmetered = links.any(
+      (l) => l == ConnectivityResult.wifi || l == ConnectivityResult.ethernet,
+    );
+    return !unmetered && links.contains(ConnectivityResult.mobile);
+  },
+);
 
 // ---- Journal ----
 
