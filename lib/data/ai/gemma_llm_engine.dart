@@ -2,14 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_gemma/flutter_gemma.dart' hide ModelSpec;
+import 'package:mindfull/data/ai/gemma_init.dart';
 import 'package:mindfull/domain/ai/llm_engine.dart';
 import 'package:mindfull/domain/ai/model_spec.dart';
 
 /// [LlmEngine] on flutter_gemma (LiteRT-LM). The verified file is registered
 /// in place (`fromFile`), never copied.
 class GemmaLlmEngine implements LlmEngine {
-  static bool _initialized = false;
-
   InferenceModel? _model;
   ModelSpec? _spec;
 
@@ -23,10 +22,7 @@ class GemmaLlmEngine implements LlmEngine {
 
   @override
   Future<void> load(ModelSpec model, String filePath) async {
-    if (!_initialized) {
-      await FlutterGemma.initialize();
-      _initialized = true;
-    }
+    await ensureGemmaInitialized();
     await unload();
     await FlutterGemma.installModel(
       modelType: _type(model),

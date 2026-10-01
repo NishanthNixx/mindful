@@ -12,6 +12,7 @@ import 'package:mindfull/domain/ai/model_spec.dart';
 import 'package:mindfull/domain/entities/journal_entry.dart';
 
 import '../helpers.dart';
+import '../support/sample_journal.dart';
 
 // Renders the main screens with the real fonts and sample data, so design
 // changes show up as image diffs. Update with:
@@ -231,6 +232,8 @@ void main() {
     await _pumpApp(tester, app);
     await tester.tap(find.text('Ask'));
     await settle(tester);
+    await tester.tap(find.text('General'));
+    await settle(tester);
     await tester.enterText(
       find.byType(TextField),
       'Give me tips to clear brain fog',
@@ -250,6 +253,57 @@ void main() {
     await session.finish();
     await settle(tester);
     await _snap(tester, 'ask_chat');
+  });
+
+  _frozen('ask journal', (tester) async {
+    final app = TestApp();
+    addTearDown(app.db.close);
+    File(
+      '${app.modelsDir.path}/${ModelCatalog.gemma4E2b.fileName}',
+    ).writeAsBytesSync([1]);
+    app.storage.data['model_installed_id'] = ModelCatalog.gemma4E2b.id;
+    app.installSearchModel();
+    await tester.runAsync(() async {
+      final repo = DriftJournalRepo(app.db);
+      for (final e in sampleJournal) {
+        await repo.saveEntry(e);
+      }
+    });
+    await _pumpApp(tester, app);
+    await tester.tap(find.text('Ask'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await settle(tester);
+    await tester.enterText(
+      find.byType(TextField),
+      'When did my migraines start getting worse?',
+    );
+    await tester.tap(find.byTooltip('Send'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 200)),
+    );
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    final prompt = app.engine.sessions.last.prompts.single;
+    int numberOf(String text) {
+      final line = prompt.split('\n').firstWhere((l) => l.contains(text));
+      return int.parse(RegExp(r'^\[(\d+)\]').firstMatch(line)!.group(1)!);
+    }
+
+    final a = numberOf('Migraine after a late night');
+    final b = numberOf('Worst migraine');
+    final c = numberOf('Another migraine');
+    final session = app.engine.sessions.last
+      ..emit(
+        'Migraines picked up in September: one on 2 Sep [$a], then two close together on '
+        '12 Sep [$b] and 15 Sep [$c]. Each came after under 6 hours of sleep [$a][$b][$c], '
+        'which may be worth mentioning to your doctor.',
+      );
+    await session.finish();
+    await settle(tester);
+    await _snap(tester, 'ask_journal');
   });
 
   _frozen('lock screen', (tester) async {

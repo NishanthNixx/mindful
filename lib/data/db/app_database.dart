@@ -42,12 +42,28 @@ class EntryTags extends Table {
   Set<Column<Object>> get primaryKey => {entryId, tagId};
 }
 
-@DriftDatabase(tables: [Entries, Tags, EntryTags])
+/// One vector per entry for journal search. Lives in the SQLCipher database
+/// with everything else; deleting an entry deletes its vector.
+@DataClassName('EmbeddingRow')
+class EntryEmbeddings extends Table {
+  TextColumn get entryId =>
+      text().references(Entries, #id, onDelete: KeyAction.cascade)();
+  TextColumn get modelId => text()();
+  TextColumn get textHash => text()();
+
+  /// Little-endian float32 values.
+  BlobColumn get vector => blob()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {entryId};
+}
+
+@DriftDatabase(tables: [Entries, Tags, EntryTags, EntryEmbeddings])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -59,6 +75,9 @@ class AppDatabase extends _$AppDatabase {
           'CREATE INDEX entries_created_at ON entries (created_at)',
         ),
       );
+    },
+    onUpgrade: (m, from, to) async {
+      if (from < 2) await m.createTable(entryEmbeddings);
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');

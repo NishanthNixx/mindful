@@ -920,12 +920,334 @@ class EntryTagsCompanion extends UpdateCompanion<EntryTagRow> {
   }
 }
 
+class $EntryEmbeddingsTable extends EntryEmbeddings
+    with TableInfo<$EntryEmbeddingsTable, EmbeddingRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $EntryEmbeddingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _entryIdMeta = const VerificationMeta(
+    'entryId',
+  );
+  @override
+  late final GeneratedColumn<String> entryId = GeneratedColumn<String>(
+    'entry_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES entries (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _modelIdMeta = const VerificationMeta(
+    'modelId',
+  );
+  @override
+  late final GeneratedColumn<String> modelId = GeneratedColumn<String>(
+    'model_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _textHashMeta = const VerificationMeta(
+    'textHash',
+  );
+  @override
+  late final GeneratedColumn<String> textHash = GeneratedColumn<String>(
+    'text_hash',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _vectorMeta = const VerificationMeta('vector');
+  @override
+  late final GeneratedColumn<Uint8List> vector = GeneratedColumn<Uint8List>(
+    'vector',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [entryId, modelId, textHash, vector];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'entry_embeddings';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<EmbeddingRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('entry_id')) {
+      context.handle(
+        _entryIdMeta,
+        entryId.isAcceptableOrUnknown(data['entry_id']!, _entryIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_entryIdMeta);
+    }
+    if (data.containsKey('model_id')) {
+      context.handle(
+        _modelIdMeta,
+        modelId.isAcceptableOrUnknown(data['model_id']!, _modelIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_modelIdMeta);
+    }
+    if (data.containsKey('text_hash')) {
+      context.handle(
+        _textHashMeta,
+        textHash.isAcceptableOrUnknown(data['text_hash']!, _textHashMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_textHashMeta);
+    }
+    if (data.containsKey('vector')) {
+      context.handle(
+        _vectorMeta,
+        vector.isAcceptableOrUnknown(data['vector']!, _vectorMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_vectorMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {entryId};
+  @override
+  EmbeddingRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return EmbeddingRow(
+      entryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entry_id'],
+      )!,
+      modelId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}model_id'],
+      )!,
+      textHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}text_hash'],
+      )!,
+      vector: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}vector'],
+      )!,
+    );
+  }
+
+  @override
+  $EntryEmbeddingsTable createAlias(String alias) {
+    return $EntryEmbeddingsTable(attachedDatabase, alias);
+  }
+}
+
+class EmbeddingRow extends DataClass implements Insertable<EmbeddingRow> {
+  final String entryId;
+  final String modelId;
+  final String textHash;
+
+  /// Little-endian float32 values.
+  final Uint8List vector;
+  const EmbeddingRow({
+    required this.entryId,
+    required this.modelId,
+    required this.textHash,
+    required this.vector,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['entry_id'] = Variable<String>(entryId);
+    map['model_id'] = Variable<String>(modelId);
+    map['text_hash'] = Variable<String>(textHash);
+    map['vector'] = Variable<Uint8List>(vector);
+    return map;
+  }
+
+  EntryEmbeddingsCompanion toCompanion(bool nullToAbsent) {
+    return EntryEmbeddingsCompanion(
+      entryId: Value(entryId),
+      modelId: Value(modelId),
+      textHash: Value(textHash),
+      vector: Value(vector),
+    );
+  }
+
+  factory EmbeddingRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return EmbeddingRow(
+      entryId: serializer.fromJson<String>(json['entryId']),
+      modelId: serializer.fromJson<String>(json['modelId']),
+      textHash: serializer.fromJson<String>(json['textHash']),
+      vector: serializer.fromJson<Uint8List>(json['vector']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'entryId': serializer.toJson<String>(entryId),
+      'modelId': serializer.toJson<String>(modelId),
+      'textHash': serializer.toJson<String>(textHash),
+      'vector': serializer.toJson<Uint8List>(vector),
+    };
+  }
+
+  EmbeddingRow copyWith({
+    String? entryId,
+    String? modelId,
+    String? textHash,
+    Uint8List? vector,
+  }) => EmbeddingRow(
+    entryId: entryId ?? this.entryId,
+    modelId: modelId ?? this.modelId,
+    textHash: textHash ?? this.textHash,
+    vector: vector ?? this.vector,
+  );
+  EmbeddingRow copyWithCompanion(EntryEmbeddingsCompanion data) {
+    return EmbeddingRow(
+      entryId: data.entryId.present ? data.entryId.value : this.entryId,
+      modelId: data.modelId.present ? data.modelId.value : this.modelId,
+      textHash: data.textHash.present ? data.textHash.value : this.textHash,
+      vector: data.vector.present ? data.vector.value : this.vector,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EmbeddingRow(')
+          ..write('entryId: $entryId, ')
+          ..write('modelId: $modelId, ')
+          ..write('textHash: $textHash, ')
+          ..write('vector: $vector')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(entryId, modelId, textHash, $driftBlobEquality.hash(vector));
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is EmbeddingRow &&
+          other.entryId == this.entryId &&
+          other.modelId == this.modelId &&
+          other.textHash == this.textHash &&
+          $driftBlobEquality.equals(other.vector, this.vector));
+}
+
+class EntryEmbeddingsCompanion extends UpdateCompanion<EmbeddingRow> {
+  final Value<String> entryId;
+  final Value<String> modelId;
+  final Value<String> textHash;
+  final Value<Uint8List> vector;
+  final Value<int> rowid;
+  const EntryEmbeddingsCompanion({
+    this.entryId = const Value.absent(),
+    this.modelId = const Value.absent(),
+    this.textHash = const Value.absent(),
+    this.vector = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  EntryEmbeddingsCompanion.insert({
+    required String entryId,
+    required String modelId,
+    required String textHash,
+    required Uint8List vector,
+    this.rowid = const Value.absent(),
+  }) : entryId = Value(entryId),
+       modelId = Value(modelId),
+       textHash = Value(textHash),
+       vector = Value(vector);
+  static Insertable<EmbeddingRow> custom({
+    Expression<String>? entryId,
+    Expression<String>? modelId,
+    Expression<String>? textHash,
+    Expression<Uint8List>? vector,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (entryId != null) 'entry_id': entryId,
+      if (modelId != null) 'model_id': modelId,
+      if (textHash != null) 'text_hash': textHash,
+      if (vector != null) 'vector': vector,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  EntryEmbeddingsCompanion copyWith({
+    Value<String>? entryId,
+    Value<String>? modelId,
+    Value<String>? textHash,
+    Value<Uint8List>? vector,
+    Value<int>? rowid,
+  }) {
+    return EntryEmbeddingsCompanion(
+      entryId: entryId ?? this.entryId,
+      modelId: modelId ?? this.modelId,
+      textHash: textHash ?? this.textHash,
+      vector: vector ?? this.vector,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (entryId.present) {
+      map['entry_id'] = Variable<String>(entryId.value);
+    }
+    if (modelId.present) {
+      map['model_id'] = Variable<String>(modelId.value);
+    }
+    if (textHash.present) {
+      map['text_hash'] = Variable<String>(textHash.value);
+    }
+    if (vector.present) {
+      map['vector'] = Variable<Uint8List>(vector.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EntryEmbeddingsCompanion(')
+          ..write('entryId: $entryId, ')
+          ..write('modelId: $modelId, ')
+          ..write('textHash: $textHash, ')
+          ..write('vector: $vector, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $EntriesTable entries = $EntriesTable(this);
   late final $TagsTable tags = $TagsTable(this);
   late final $EntryTagsTable entryTags = $EntryTagsTable(this);
+  late final $EntryEmbeddingsTable entryEmbeddings = $EntryEmbeddingsTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -934,6 +1256,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     entries,
     tags,
     entryTags,
+    entryEmbeddings,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -950,6 +1273,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('entry_tags', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'entries',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('entry_embeddings', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -994,6 +1324,26 @@ final class $$EntriesTableReferences
     ).filter((f) => f.entryId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_entryTagsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$EntryEmbeddingsTable, List<EmbeddingRow>>
+  _entryEmbeddingsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.entryEmbeddings,
+    aliasName: 'entries__id__entry_embeddings__entry_id',
+  );
+
+  $$EntryEmbeddingsTableProcessedTableManager get entryEmbeddingsRefs {
+    final manager = $$EntryEmbeddingsTableTableManager(
+      $_db,
+      $_db.entryEmbeddings,
+    ).filter((f) => f.entryId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _entryEmbeddingsRefsTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -1060,6 +1410,31 @@ class $$EntriesTableFilterComposer
           }) => $$EntryTagsTableFilterComposer(
             $db: $db,
             $table: $db.entryTags,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> entryEmbeddingsRefs(
+    Expression<bool> Function($$EntryEmbeddingsTableFilterComposer f) f,
+  ) {
+    final $$EntryEmbeddingsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.entryEmbeddings,
+      getReferencedColumn: (t) => t.entryId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EntryEmbeddingsTableFilterComposer(
+            $db: $db,
+            $table: $db.entryEmbeddings,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -1171,6 +1546,31 @@ class $$EntriesTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> entryEmbeddingsRefs<T extends Object>(
+    Expression<T> Function($$EntryEmbeddingsTableAnnotationComposer a) f,
+  ) {
+    final $$EntryEmbeddingsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.entryEmbeddings,
+      getReferencedColumn: (t) => t.entryId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EntryEmbeddingsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.entryEmbeddings,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$EntriesTableTableManager
@@ -1186,7 +1586,7 @@ class $$EntriesTableTableManager
           $$EntriesTableUpdateCompanionBuilder,
           (EntryRow, $$EntriesTableReferences),
           EntryRow,
-          PrefetchHooks Function({bool entryTagsRefs})
+          PrefetchHooks Function({bool entryTagsRefs, bool entryEmbeddingsRefs})
         > {
   $$EntriesTableTableManager(_$AppDatabase db, $EntriesTable table)
     : super(
@@ -1247,32 +1647,63 @@ class $$EntriesTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({entryTagsRefs = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [if (entryTagsRefs) db.entryTags],
-              addJoins: null,
-              getPrefetchedDataCallback: (items) async {
-                return [
-                  if (entryTagsRefs)
-                    await $_getPrefetchedData<
-                      EntryRow,
-                      $EntriesTable,
-                      EntryTagRow
-                    >(
-                      currentTable: table,
-                      referencedTable: $$EntriesTableReferences
-                          ._entryTagsRefsTable(db),
-                      managerFromTypedResult: (p0) =>
-                          $$EntriesTableReferences(db, table, p0).entryTagsRefs,
-                      referencedItemsForCurrentItem: (item, referencedItems) =>
-                          referencedItems.where((e) => e.entryId == item.id),
-                      typedResults: items,
-                    ),
-                ];
+          prefetchHooksCallback:
+              ({entryTagsRefs = false, entryEmbeddingsRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (entryTagsRefs) db.entryTags,
+                    if (entryEmbeddingsRefs) db.entryEmbeddings,
+                  ],
+                  addJoins: null,
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (entryTagsRefs)
+                        await $_getPrefetchedData<
+                          EntryRow,
+                          $EntriesTable,
+                          EntryTagRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$EntriesTableReferences
+                              ._entryTagsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$EntriesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).entryTagsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.entryId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (entryEmbeddingsRefs)
+                        await $_getPrefetchedData<
+                          EntryRow,
+                          $EntriesTable,
+                          EmbeddingRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$EntriesTableReferences
+                              ._entryEmbeddingsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$EntriesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).entryEmbeddingsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.entryId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
               },
-            );
-          },
         ),
       );
 }
@@ -1289,7 +1720,7 @@ typedef $$EntriesTableProcessedTableManager =
       $$EntriesTableUpdateCompanionBuilder,
       (EntryRow, $$EntriesTableReferences),
       EntryRow,
-      PrefetchHooks Function({bool entryTagsRefs})
+      PrefetchHooks Function({bool entryTagsRefs, bool entryEmbeddingsRefs})
     >;
 typedef $$TagsTableCreateCompanionBuilder =
     TagsCompanion Function({
@@ -1875,6 +2306,312 @@ typedef $$EntryTagsTableProcessedTableManager =
       EntryTagRow,
       PrefetchHooks Function({bool entryId, bool tagId})
     >;
+typedef $$EntryEmbeddingsTableCreateCompanionBuilder =
+    EntryEmbeddingsCompanion Function({
+      required String entryId,
+      required String modelId,
+      required String textHash,
+      required Uint8List vector,
+      Value<int> rowid,
+    });
+typedef $$EntryEmbeddingsTableUpdateCompanionBuilder =
+    EntryEmbeddingsCompanion Function({
+      Value<String> entryId,
+      Value<String> modelId,
+      Value<String> textHash,
+      Value<Uint8List> vector,
+      Value<int> rowid,
+    });
+
+final class $$EntryEmbeddingsTableReferences
+    extends BaseReferences<_$AppDatabase, $EntryEmbeddingsTable, EmbeddingRow> {
+  $$EntryEmbeddingsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $EntriesTable _entryIdTable(_$AppDatabase db) =>
+      db.entries.createAlias('entry_embeddings__entry_id__entries__id');
+
+  $$EntriesTableProcessedTableManager get entryId {
+    final $_column = $_itemColumn<String>('entry_id')!;
+
+    final manager = $$EntriesTableTableManager(
+      $_db,
+      $_db.entries,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_entryIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$EntryEmbeddingsTableFilterComposer
+    extends Composer<_$AppDatabase, $EntryEmbeddingsTable> {
+  $$EntryEmbeddingsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get modelId => $composableBuilder(
+    column: $table.modelId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get textHash => $composableBuilder(
+    column: $table.textHash,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get vector => $composableBuilder(
+    column: $table.vector,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$EntriesTableFilterComposer get entryId {
+    final $$EntriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.entryId,
+      referencedTable: $db.entries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EntriesTableFilterComposer(
+            $db: $db,
+            $table: $db.entries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$EntryEmbeddingsTableOrderingComposer
+    extends Composer<_$AppDatabase, $EntryEmbeddingsTable> {
+  $$EntryEmbeddingsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get modelId => $composableBuilder(
+    column: $table.modelId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get textHash => $composableBuilder(
+    column: $table.textHash,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get vector => $composableBuilder(
+    column: $table.vector,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$EntriesTableOrderingComposer get entryId {
+    final $$EntriesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.entryId,
+      referencedTable: $db.entries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EntriesTableOrderingComposer(
+            $db: $db,
+            $table: $db.entries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$EntryEmbeddingsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $EntryEmbeddingsTable> {
+  $$EntryEmbeddingsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get modelId =>
+      $composableBuilder(column: $table.modelId, builder: (column) => column);
+
+  GeneratedColumn<String> get textHash =>
+      $composableBuilder(column: $table.textHash, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get vector =>
+      $composableBuilder(column: $table.vector, builder: (column) => column);
+
+  $$EntriesTableAnnotationComposer get entryId {
+    final $$EntriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.entryId,
+      referencedTable: $db.entries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$EntriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.entries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$EntryEmbeddingsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $EntryEmbeddingsTable,
+          EmbeddingRow,
+          $$EntryEmbeddingsTableFilterComposer,
+          $$EntryEmbeddingsTableOrderingComposer,
+          $$EntryEmbeddingsTableAnnotationComposer,
+          $$EntryEmbeddingsTableCreateCompanionBuilder,
+          $$EntryEmbeddingsTableUpdateCompanionBuilder,
+          (EmbeddingRow, $$EntryEmbeddingsTableReferences),
+          EmbeddingRow,
+          PrefetchHooks Function({bool entryId})
+        > {
+  $$EntryEmbeddingsTableTableManager(
+    _$AppDatabase db,
+    $EntryEmbeddingsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$EntryEmbeddingsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$EntryEmbeddingsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$EntryEmbeddingsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> entryId = const Value.absent(),
+                Value<String> modelId = const Value.absent(),
+                Value<String> textHash = const Value.absent(),
+                Value<Uint8List> vector = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => EntryEmbeddingsCompanion(
+                entryId: entryId,
+                modelId: modelId,
+                textHash: textHash,
+                vector: vector,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String entryId,
+                required String modelId,
+                required String textHash,
+                required Uint8List vector,
+                Value<int> rowid = const Value.absent(),
+              }) => EntryEmbeddingsCompanion.insert(
+                entryId: entryId,
+                modelId: modelId,
+                textHash: textHash,
+                vector: vector,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$EntryEmbeddingsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({entryId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (entryId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.entryId,
+                                referencedTable:
+                                    $$EntryEmbeddingsTableReferences
+                                        ._entryIdTable(db),
+                                referencedColumn:
+                                    $$EntryEmbeddingsTableReferences
+                                        ._entryIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$EntryEmbeddingsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $EntryEmbeddingsTable,
+      EmbeddingRow,
+      $$EntryEmbeddingsTableFilterComposer,
+      $$EntryEmbeddingsTableOrderingComposer,
+      $$EntryEmbeddingsTableAnnotationComposer,
+      $$EntryEmbeddingsTableCreateCompanionBuilder,
+      $$EntryEmbeddingsTableUpdateCompanionBuilder,
+      (EmbeddingRow, $$EntryEmbeddingsTableReferences),
+      EmbeddingRow,
+      PrefetchHooks Function({bool entryId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -1884,4 +2621,6 @@ class $AppDatabaseManager {
   $$TagsTableTableManager get tags => $$TagsTableTableManager(_db, _db.tags);
   $$EntryTagsTableTableManager get entryTags =>
       $$EntryTagsTableTableManager(_db, _db.entryTags);
+  $$EntryEmbeddingsTableTableManager get entryEmbeddings =>
+      $$EntryEmbeddingsTableTableManager(_db, _db.entryEmbeddings);
 }

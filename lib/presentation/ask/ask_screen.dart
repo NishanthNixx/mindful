@@ -4,22 +4,37 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:mindfull/core/providers.dart';
 import 'package:mindfull/core/router.dart';
 import 'package:mindfull/core/theme.dart';
+import 'package:mindfull/data/ai/embedder_manager.dart';
 import 'package:mindfull/domain/ai/model_spec.dart';
 import 'package:mindfull/domain/ai/model_status.dart';
+import 'package:mindfull/domain/entities/journal_entry.dart';
+import 'package:mindfull/domain/journal_search/prompt.dart';
 import 'package:mindfull/presentation/ask/ask_controller.dart';
+import 'package:mindfull/presentation/models/model_manager_screen.dart';
 import 'package:mindfull/presentation/shared/appearance.dart';
 import 'package:mindfull/presentation/shared/format.dart';
 import 'package:mindfull/presentation/shared/mindfull_scaffold.dart';
+import 'package:mindfull/presentation/shared/mood.dart';
 import 'package:mindfull/presentation/shared/network_indicator.dart';
 import 'package:mindfull/presentation/shared/paper_card.dart';
+import 'package:mindfull/presentation/timeline/timeline_screen.dart'
+    show openEditor;
 
 const _examples = [
   'When did my headaches start getting worse?',
   'Summarise my week for my doctor',
   'Does poor sleep come before my migraines?',
+];
+
+const _journalStarters = [
+  'When did my headaches start getting worse?',
+  'How has my sleep been this month?',
+  'What was going on on my good days?',
+  'Summarise my last week',
 ];
 
 const _starters = [
@@ -41,7 +56,17 @@ class _AskScreenState extends ConsumerState<AskScreen> {
     super.initState();
     // Opening Ask is what loads an installed model into memory.
     unawaited(
-      Future.microtask(() => ref.read(modelManagerProvider).ensureLoaded()),
+      Future.microtask(() async {
+        await ref.read(modelManagerProvider).ensureLoaded();
+        // Warm up journal search so the first question doesn't wait for it.
+        final search = ref.read(embedderManagerProvider);
+        await search.restore();
+        if (await search.ensureLoaded()) {
+          await ref
+              .read(journalIndexerProvider)
+              .sync(ref.read(embedderRuntimeProvider));
+        }
+      }),
     );
   }
 
@@ -184,6 +209,9 @@ class _ChatState extends ConsumerState<_Chat> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(askControllerProvider);
+    final search = ref.watch(searchStatusProvider);
+    final searchUsable = search is SearchInstalled || search is SearchReady;
+    final canSend = state.mode == AskMode.general || searchUsable;
     final theme = Theme.of(context);
     final keyboard = MediaQuery.viewInsetsOf(context).bottom > 0;
     final bottomInset = keyboard ? 8.0 : widget.padding.bottom - 16;
@@ -196,7 +224,33 @@ class _ChatState extends ConsumerState<_Chat> {
             padding: widget.padding.copyWith(bottom: 16),
             children: [
               _StatusStrip(label: '${widget.model.displayName} active'),
+              const SizedBox(height: 14),
+              SegmentedButton<AskMode>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(
+                    value: AskMode.journal,
+                    icon: Icon(Icons.auto_stories_outlined),
+                    label: Text('Your journal'),
+                  ),
+                  ButtonSegment(
+                    value: AskMode.general,
+                    icon: Icon(Icons.chat_bubble_outline),
+                    label: Text('General'),
+                  ),
+                ],
+                selected: {state.mode},
+                onSelectionChanged: state.generating
+                    ? null
+                    : (m) => ref
+                          .read(askControllerProvider.notifier)
+                          .setMode(m.single),
+              ),
               const SizedBox(height: 16),
+              if (state.mode == AskMode.journal && !searchUsable) ...[
+                const _SearchSetupCard(),
+                const SizedBox(height: 16),
+              ],
               if (state.messages.isEmpty) ...[
                 PaperCard(
                   padding: const EdgeInsets.all(20),
@@ -204,13 +258,18 @@ class _ChatState extends ConsumerState<_Chat> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Chat privately with ${widget.model.displayName}',
+                        state.mode == AskMode.journal
+                            ? 'Ask about your journal'
+                            : 'Chat privately with ${widget.model.displayName}',
                         style: theme.textTheme.titleLarge,
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Every word is generated on this phone — try it in airplane mode. '
-                        "It doesn't read your journal yet; answers that cite your entries come next.",
+                        state.mode == AskMode.journal
+                            ? 'Answers come only from your own entries and cite them — tap a number to open '
+                                  'the entry. Everything runs on this phone, even in airplane mode.'
+                            : 'Every word is generated on this phone — try it in airplane mode. '
+                                  "General chat doesn't look at your journal.",
                         style: theme.textTheme.bodySmall?.copyWith(height: 1.5),
                       ),
                     ],
@@ -223,8 +282,14 @@ class _ChatState extends ConsumerState<_Chat> {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    for (final q in _starters)
-                      ActionChip(label: Text(q), onPressed: () => _send(q)),
+                    for (final q
+                        in state.mode == AskMode.journal
+                            ? _journalStarters
+                            : _starters)
+                      ActionChip(
+                        label: Text(q),
+                        onPressed: canSend ? () => _send(q) : null,
+                      ),
                   ],
                 ),
               ],
@@ -252,6 +317,10 @@ class _ChatState extends ConsumerState<_Chat> {
               _InputBar(
                 controller: _input,
                 generating: state.generating,
+                enabled: canSend,
+                hint: state.mode == AskMode.journal
+                    ? 'Ask about your entries…'
+                    : 'Ask anything, privately…',
                 onSend: _send,
                 onStop: () => ref.read(askControllerProvider.notifier).stop(),
               ),
@@ -321,11 +390,7 @@ class _AssistantCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final answerStyle = theme.textTheme.bodyLarge?.copyWith(
-      fontFamily: 'Literata',
-      fontSize: 19,
-      height: 1.55,
-    );
+    final journal = message.mode == AskMode.journal;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -350,7 +415,7 @@ class _AssistantCard extends StatelessWidget {
             ),
             Flexible(
               child: Text(
-                ' · $modelName, on-device',
+                journal ? ' · from your journal' : ' · $modelName, on-device',
                 style: theme.textTheme.labelSmall,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -363,76 +428,333 @@ class _AssistantCard extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
           child: ValueListenableBuilder<bool>(
             valueListenable: message.streaming,
-            builder: (context, streaming, _) => Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ValueListenableBuilder<String>(
-                  valueListenable: message.text,
-                  builder: (context, text, _) {
-                    if (streaming) {
-                      WidgetsBinding.instance.addPostFrameCallback(
-                        (_) => onGrow(),
-                      );
-                    }
-                    return ValueListenableBuilder<bool>(
-                      valueListenable: message.thinking,
-                      builder: (context, thinking, _) {
-                        if (text.isEmpty && streaming) {
-                          return Row(
-                            children: [
-                              const SizedBox.square(
-                                dimension: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Text(
-                                thinking ? 'Thinking…' : 'Starting…',
-                                style: theme.textTheme.bodySmall,
-                              ),
-                            ],
-                          );
-                        }
-                        return SelectableText.rich(
-                          TextSpan(
-                            style: answerStyle,
-                            children: [
-                              TextSpan(text: text),
-                              if (streaming)
-                                WidgetSpan(
-                                  alignment: PlaceholderAlignment.middle,
-                                  child: Container(
-                                    margin: const EdgeInsets.only(left: 3),
-                                    width: 3,
-                                    height: 20,
-                                    decoration: BoxDecoration(
-                                      color: MindfullTokens.of(context).brand,
-                                      borderRadius: BorderRadius.circular(2),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-                if (streaming)
-                  ActionChip(
-                    avatar: const Icon(Icons.stop_rounded, size: 18),
-                    label: const Text('Stop generating'),
-                    onPressed: onStop,
-                  )
-                else
-                  _Footer(message: message),
-              ],
+            builder: (context, streaming, _) => ValueListenableBuilder<String>(
+              valueListenable: message.text,
+              builder: (context, text, _) {
+                if (streaming) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) => onGrow());
+                }
+                final cited = journal
+                    ? citedNumbers(text, message.sources.length)
+                    : const <int>[];
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (text.isEmpty && streaming)
+                      _Waiting(message: message)
+                    else
+                      _AnswerText(
+                        text: text,
+                        message: message,
+                        streaming: streaming,
+                      ),
+                    if (cited.isNotEmpty && !streaming) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        'REFERENCED JOURNAL ENTRIES',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          letterSpacing: 1.1,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      for (final n in cited)
+                        _SourceTile(number: n, entry: message.sources[n - 1]),
+                    ] else if (journal &&
+                        !streaming &&
+                        message.sources.isNotEmpty &&
+                        text.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        'Searched ${message.sources.length} related entries',
+                        style: theme.textTheme.labelSmall,
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    if (streaming)
+                      ActionChip(
+                        avatar: const Icon(Icons.stop_rounded, size: 18),
+                        label: const Text('Stop generating'),
+                        onPressed: onStop,
+                      )
+                    else
+                      _Footer(message: message),
+                  ],
+                );
+              },
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _Waiting extends StatelessWidget {
+  const _Waiting({required this.message});
+
+  final ChatMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([message.phase, message.thinking]),
+      builder: (context, _) => Row(
+        children: [
+          const SizedBox.square(
+            dimension: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Text(
+              message.thinking.value
+                  ? 'Thinking…'
+                  : message.phase.value ?? 'Starting…',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Answer text with `[n]` citations turned into tappable number chips.
+class _AnswerText extends StatelessWidget {
+  const _AnswerText({
+    required this.text,
+    required this.message,
+    required this.streaming,
+  });
+
+  final String text;
+  final ChatMessage message;
+  final bool streaming;
+
+  static final _citation = RegExp(r'\[(\d+(?:\s*[,;]\s*\d+)*)\]');
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = MindfullTokens.of(context);
+    final style = theme.textTheme.bodyLarge?.copyWith(
+      fontFamily: 'Literata',
+      fontSize: 19,
+      height: 1.55,
+    );
+    final spans = <InlineSpan>[];
+    var last = 0;
+    for (final m
+        in message.mode == AskMode.journal
+            ? _citation.allMatches(text)
+            : const <RegExpMatch>[]) {
+      spans.add(TextSpan(text: text.substring(last, m.start)));
+      for (final raw in m.group(1)!.split(RegExp(r'\s*[,;]\s*'))) {
+        final n = int.parse(raw);
+        if (n < 1 || n > message.sources.length) continue;
+        spans.add(
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: _CitationChip(
+              key: ValueKey('citation-$n'),
+              number: n,
+              entry: message.sources[n - 1],
+            ),
+          ),
+        );
+      }
+      last = m.end;
+    }
+    spans.add(TextSpan(text: text.substring(last)));
+    if (streaming) {
+      spans.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: Container(
+            margin: const EdgeInsets.only(left: 3),
+            width: 3,
+            height: 20,
+            decoration: BoxDecoration(
+              color: t.brand,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ),
+      );
+    }
+    // Not SelectableText: its selection gestures would swallow taps on the
+    // citation chips. The Copy button covers copying.
+    return Text.rich(TextSpan(style: style, children: spans));
+  }
+}
+
+class _CitationChip extends StatelessWidget {
+  const _CitationChip({required this.number, required this.entry, super.key});
+
+  final int number;
+  final JournalEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      button: true,
+      label:
+          'Source $number: entry from ${DateFormat('EEEE d MMMM').format(entry.createdAt)}',
+      excludeSemantics: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: () => openEditor(context, Routes.entry(entry.id)),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+            decoration: BoxDecoration(
+              color: scheme.secondaryContainer.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              '$number',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: scheme.onSecondaryContainer,
+                height: 1.2,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SourceTile extends StatelessWidget {
+  const _SourceTile({required this.number, required this.entry});
+
+  final int number;
+  final JournalEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final t = MindfullTokens.of(context);
+    final e = entry;
+    final headline = [
+      DateFormat('EEE d MMM').format(e.createdAt),
+      if (e.symptoms.isNotEmpty) e.symptoms.join(', ') else moodLabel(e.mood),
+    ].join(' · ');
+    final detail = [
+      'Mood: ${moodLabel(e.mood)}',
+      if (e.sleepHours case final h?)
+        'Sleep: ${h == h.roundToDouble() ? h.toInt() : h}h',
+      ...e.medications,
+    ].join(' · ');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: t.canvas.withValues(alpha: 0.7),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: t.cardBorder),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => openEditor(context, Routes.entry(e.id)),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 13,
+                  backgroundColor: theme.colorScheme.secondaryContainer
+                      .withValues(alpha: 0.8),
+                  child: Text('$number', style: theme.textTheme.labelMedium),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        headline,
+                        style: theme.textTheme.titleSmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        detail,
+                        style: theme.textTheme.labelSmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, size: 20),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SearchSetupCard extends ConsumerWidget {
+  const _SearchSetupCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final status = ref.watch(searchStatusProvider);
+    final spec = ref.read(embedderManagerProvider).spec;
+    return PaperCard(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Journal search needs one more small model',
+            style: theme.textTheme.titleMedium,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            switch (status) {
+              SearchDownloading(:final progress, :final paused) =>
+                paused
+                    ? 'Paused at ${(progress * 100).round()}%.'
+                    : 'Downloading… ${(progress * 100).round()}%',
+              SearchVerifying() => 'Checking the download…',
+              SearchFailed(:final message) => message,
+              _ =>
+                'A ${formatBytes(spec.sizeBytes)} English search model lets Mindfull find the entries that '
+                    'answer your question. Like everything else, it runs on this phone.',
+            },
+            style: theme.textTheme.bodySmall,
+          ),
+          if (status case SearchDownloading(:final progress)) ...[
+            const SizedBox(height: 12),
+            LinearProgressIndicator(value: progress),
+          ],
+          if (switch (status) {
+            SearchNotInstalled() ||
+            SearchFailed() ||
+            SearchDownloading(paused: true) => true,
+            _ => false,
+          }) ...[
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: () => startSearchDownload(context, ref),
+              icon: const Icon(Icons.download_rounded),
+              label: Text(
+                status is SearchNotInstalled
+                    ? 'Download ${formatBytes(spec.sizeBytes)}'
+                    : 'Resume',
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -488,10 +810,14 @@ class _InputBar extends StatelessWidget {
     required this.generating,
     required this.onSend,
     required this.onStop,
+    this.enabled = true,
+    this.hint = 'Ask anything, privately…',
   });
 
   final TextEditingController controller;
   final bool generating;
+  final bool enabled;
+  final String hint;
   final void Function([String?]) onSend;
   final VoidCallback onStop;
 
@@ -515,12 +841,13 @@ class _InputBar extends StatelessWidget {
               maxLines: 4,
               textCapitalization: TextCapitalization.sentences,
               textInputAction: TextInputAction.send,
+              enabled: enabled,
               onSubmitted: generating ? null : onSend,
-              decoration: const InputDecoration(
-                hintText: 'Ask anything, privately…',
+              decoration: InputDecoration(
+                hintText: hint,
                 filled: false,
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(
+                contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 12,
                 ),
@@ -534,7 +861,11 @@ class _InputBar extends StatelessWidget {
               foregroundColor: t.onBrand,
               minimumSize: const Size(48, 48),
             ),
-            onPressed: generating ? onStop : onSend,
+            onPressed: generating
+                ? onStop
+                : enabled
+                ? onSend
+                : null,
             icon: Icon(
               generating ? Icons.stop_rounded : Icons.arrow_upward_rounded,
             ),

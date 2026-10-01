@@ -10,6 +10,11 @@ abstract interface class JournalRepo {
     EntryFilter filter = const EntryFilter(),
   ]);
 
+  /// One-off read (newest first), for search and summaries.
+  Future<List<JournalEntry>> entries([
+    EntryFilter filter = const EntryFilter(),
+  ]);
+
   Future<JournalEntry?> getEntry(String id);
 
   /// Insert or replace.

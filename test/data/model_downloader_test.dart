@@ -118,16 +118,15 @@ void main() {
           expectedSize: bytes.length,
         )
         .listen((p) {
+          // Cancel's future completes after the partial file is flushed.
           if (p.receivedBytes > 40000 && !paused.isCompleted) {
-            paused.complete();
-            unawaited(sub.cancel());
+            paused.complete(sub.cancel());
           }
         });
     await paused.future;
-    await Future<void>.delayed(const Duration(milliseconds: 100));
     final kept = part.lengthSync();
     expect(kept, inExclusiveRange(0, bytes.length));
-    await Future<void>.delayed(const Duration(milliseconds: 100));
+    await Future<void>.delayed(const Duration(milliseconds: 200));
     expect(part.lengthSync(), kept, reason: 'nothing written after pause');
   });
 

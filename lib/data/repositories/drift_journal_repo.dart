@@ -80,6 +80,11 @@ class DriftJournalRepo implements JournalRepo {
   }
 
   @override
+  Future<List<JournalEntry>> entries([
+    EntryFilter filter = const EntryFilter(),
+  ]) => watchEntries(filter).first;
+
+  @override
   Future<JournalEntry?> getEntry(String id) async {
     final row = await (_db.select(
       _db.entries,
@@ -165,6 +170,7 @@ class DriftJournalRepo implements JournalRepo {
 
   @override
   Future<void> deleteAll() => _db.transaction(() async {
+    await _db.delete(_db.entryEmbeddings).go();
     await _db.delete(_db.entryTags).go();
     await _db.delete(_db.entries).go();
     await _db.delete(_db.tags).go();

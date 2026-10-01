@@ -115,3 +115,59 @@ abstract final class ModelCatalog {
     return null;
   }
 }
+
+/// One file of a downloadable artifact, verified by SHA-256.
+@immutable
+class ModelFile {
+  const ModelFile({
+    required this.url,
+    required this.fileName,
+    required this.sizeBytes,
+    required this.sha256,
+  });
+
+  final String url;
+  final String fileName;
+  final int sizeBytes;
+  final String sha256;
+}
+
+/// The small embedding model behind journal search. English only.
+@immutable
+class EmbedderSpec {
+  const EmbedderSpec({
+    required this.id,
+    required this.displayName,
+    required this.model,
+    required this.tokenizer,
+  });
+
+  final String id;
+  final String displayName;
+  final ModelFile model;
+  final ModelFile tokenizer;
+
+  int get sizeBytes => model.sizeBytes + tokenizer.sizeBytes;
+  List<ModelFile> get files => [model, tokenizer];
+
+  static const gecko = EmbedderSpec(
+    id: 'gecko-110m-en-512',
+    displayName: 'Gecko 110M (journal search)',
+    model: ModelFile(
+      url:
+          'https://huggingface.co/litert-community/Gecko-110m-en/resolve/main/Gecko_512_quant.tflite',
+      fileName: 'Gecko_512_quant.tflite',
+      sizeBytes: 120432640,
+      sha256:
+          '2b11bb47da36b6085e65f46af28609f64ec13feb039e8d319cdaa0a10d608b19',
+    ),
+    tokenizer: ModelFile(
+      url:
+          'https://huggingface.co/litert-community/Gecko-110m-en/resolve/main/sentencepiece.model',
+      fileName: 'gecko-sentencepiece.model',
+      sizeBytes: 794346,
+      sha256:
+          '839ffa4b9afae8d77834a88b87781849aa021975d6063dec6085633fcaf7171c',
+    ),
+  );
+}

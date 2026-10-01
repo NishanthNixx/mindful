@@ -10,11 +10,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mindfull/app.dart';
 import 'package:mindfull/core/providers.dart';
 import 'package:mindfull/core/router.dart';
+import 'package:mindfull/data/ai/embedder_manager.dart';
 import 'package:mindfull/data/ai/model_manager.dart';
 import 'package:mindfull/data/db/app_database.dart';
 import 'package:mindfull/data/security/app_lock_service.dart';
 import 'package:mindfull/data/security/pin_hasher.dart';
 import 'package:mindfull/domain/ai/device_profile.dart';
+import 'package:mindfull/domain/ai/embedder.dart';
 import 'package:mindfull/domain/ai/llm_engine.dart';
 import 'package:mindfull/domain/ai/model_spec.dart';
 import 'package:mindfull/domain/services/device_info.dart';
@@ -98,6 +100,7 @@ class TestApp {
   final speech = FakeSpeech();
   final device = FakeDeviceInfo();
   final engine = FakeLlmEngine();
+  final embedder = FakeEmbedder();
   late final AppDatabase db;
   late final Directory modelsDir = Directory.systemTemp.createTempSync(
     'mindfull_models',
@@ -109,6 +112,21 @@ class TestApp {
     modelsDir: () async => modelsDir,
     hashInIsolate: false,
   );
+  late final EmbedderManager search = EmbedderManager(
+    embedder: embedder,
+    deviceInfo: device,
+    storage: storage,
+    modelsDir: () async => modelsDir,
+    hashInIsolate: false,
+  );
+
+  /// Pretend the search model files are downloaded and verified.
+  void installSearchModel() {
+    for (final f in EmbedderSpec.gecko.files) {
+      File('${modelsDir.path}/${f.fileName}').writeAsBytesSync([1]);
+    }
+    storage.data['embedder_installed_id'] = EmbedderSpec.gecko.id;
+  }
 
   Widget build({
     bool natureBackgrounds = false,
@@ -129,6 +147,11 @@ class TestApp {
       modelManagerProvider.overrideWith((ref) {
         unawaited(models.restore());
         return models;
+      }),
+      embedderRuntimeProvider.overrideWithValue(embedder),
+      embedderManagerProvider.overrideWith((ref) {
+        unawaited(search.restore());
+        return search;
       }),
       // Fast PBKDF2 so widget tests stay quick.
       appLockServiceProvider.overrideWithValue(
@@ -270,4 +293,49 @@ class FakeLlmSession implements LlmSession {
 
   @override
   Future<void> close() async => closed = true;
+}
+
+/// Deterministic bag-of-words "embedder": similar words → similar vectors.
+/// Lets retrieval be tested exactly, without a native model.
+class FakeEmbedder implements EmbedderRuntime {
+  FakeEmbedder({this.modelId = 'fake-embedder'});
+
+  @override
+  final String modelId;
+  bool loaded = false;
+  int calls = 0;
+  Object? loadError;
+
+  static const dims = 256;
+
+  @override
+  bool get isLoaded => loaded;
+
+  @override
+  Future<void> load(
+    EmbedderSpec spec, {
+    required String modelPath,
+    required String tokenizerPath,
+  }) async {
+    if (loadError case final e?) throw Exception(e);
+    loaded = true;
+  }
+
+  @override
+  Future<void> unload() async => loaded = false;
+
+  @override
+  Future<List<double>> embed(
+    String text, {
+    EmbedPurpose purpose = EmbedPurpose.query,
+  }) async {
+    calls++;
+    final v = List<double>.filled(dims, 0);
+    for (final m in RegExp('[a-z]{3,}').allMatches(text.toLowerCase())) {
+      var w = m.group(0)!;
+      if (w.endsWith('s') && w.length > 4) w = w.substring(0, w.length - 1);
+      v[w.hashCode % dims] += 1;
+    }
+    return v;
+  }
 }

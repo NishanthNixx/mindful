@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mindfull/core/providers.dart';
 import 'package:mindfull/core/theme.dart';
+import 'package:mindfull/data/ai/embedder_manager.dart';
+import 'package:mindfull/data/ai/journal_indexer.dart';
 import 'package:mindfull/data/ai/model_manager.dart';
 import 'package:mindfull/domain/ai/device_profile.dart';
 import 'package:mindfull/domain/ai/model_spec.dart';
@@ -53,6 +57,14 @@ Future<void> startModelDownload(
   }
   try {
     await manager.download(model);
+    final search = ref.read(embedderManagerProvider);
+    if (search.value is SearchNotInstalled) {
+      unawaited(
+        search.download().catchError((Object e) {
+          debugPrint('Search model download not started: $e');
+        }),
+      );
+    }
   } on InsufficientStorage catch (e) {
     if (!context.mounted) return;
     await showDialog<void>(
@@ -63,6 +75,31 @@ Future<void> startModelDownload(
         content: Text(
           'Free up about ${formatBytes(e.bytesToFree)} on this phone, then try again. '
           'Mindfull keeps some room spare so your phone never fills up completely.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Download the journal search model (with the same storage check).
+Future<void> startSearchDownload(BuildContext context, WidgetRef ref) async {
+  try {
+    await ref.read(embedderManagerProvider).download();
+  } on InsufficientStorage catch (e) {
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        icon: const Icon(Icons.sd_storage_outlined),
+        title: const Text('Not enough space'),
+        content: Text(
+          'Free up about ${formatBytes(e.bytesToFree)} on this phone, then try again.',
         ),
         actions: [
           FilledButton(
@@ -142,6 +179,10 @@ class ModelManagerScreen extends ConsumerWidget {
             onCancel: (m) => ref.read(modelManagerProvider).cancel(m),
             onRemove: (m) => _confirmRemove(context, ref, m),
           ),
+          if (status is! ModelUnsupported) ...[
+            const SizedBox(height: 16),
+            const _SearchCard(),
+          ],
           if (device.value case final d?
               when _otherModels(d, status).isNotEmpty) ...[
             const SizedBox(height: 24),
@@ -525,3 +566,132 @@ class _StatusCard extends StatelessWidget {
     );
   }
 }
+
+class _SearchCard extends ConsumerWidget {
+  const _SearchCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final status = ref.watch(searchStatusProvider);
+    final indexed = ref.watch(_indexProgressProvider);
+    final manager = ref.read(embedderManagerProvider);
+    final spec = manager.spec;
+
+    final (pill, body) = switch (status) {
+      SearchNotInstalled() => (
+        null,
+        'Lets Ask find the entries that answer your question. ${formatBytes(spec.sizeBytes)}, English only.',
+      ),
+      SearchDownloading(
+        :final receivedBytes,
+        :final totalBytes,
+        :final paused,
+      ) =>
+        (
+          paused ? 'Paused' : 'Downloading',
+          '${formatBytes(receivedBytes)} of ${formatBytes(totalBytes)}',
+        ),
+      SearchVerifying() => ('Verifying', 'Checking the download (SHA-256)…'),
+      SearchInstalled() => (
+        'Installed',
+        'Loads when you ask about your journal.',
+      ),
+      SearchReady() => (
+        'Ready',
+        indexed.running
+            ? 'Indexing entries… ${indexed.done} of ${indexed.total}'
+            : 'Your entries are indexed on this phone.',
+      ),
+      SearchFailed(:final message) => ('Stopped', message),
+    };
+
+    return PaperCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: scheme.secondaryContainer.withValues(
+                  alpha: 0.6,
+                ),
+                child: Icon(
+                  Icons.manage_search_rounded,
+                  size: 20,
+                  color: scheme.secondary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Journal search',
+                  style: theme.textTheme.titleLarge,
+                ),
+              ),
+              if (pill != null)
+                Pill(
+                  dense: true,
+                  label: pill,
+                  background: scheme.secondaryContainer.withValues(alpha: 0.6),
+                  foreground: scheme.secondary,
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(body, style: theme.textTheme.bodySmall),
+          if (status case SearchDownloading(:final progress)) ...[
+            const SizedBox(height: 12),
+            LinearProgressIndicator(value: progress),
+          ],
+          const SizedBox(height: 14),
+          switch (status) {
+            SearchNotInstalled() ||
+            SearchFailed(canResume: true) ||
+            SearchDownloading(paused: true) => FilledButton.icon(
+              onPressed: () => startSearchDownload(context, ref),
+              icon: const Icon(Icons.download_rounded),
+              label: Text(
+                status is SearchNotInstalled
+                    ? 'Download ${formatBytes(spec.sizeBytes)}'
+                    : 'Resume',
+              ),
+            ),
+            SearchDownloading() => FilledButton.tonalIcon(
+              onPressed: manager.pause,
+              icon: const Icon(Icons.pause_rounded),
+              label: const Text('Pause'),
+            ),
+            SearchInstalled() ||
+            SearchReady() ||
+            SearchFailed() => OutlinedButton.icon(
+              onPressed: manager.remove,
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Remove search model'),
+            ),
+            SearchVerifying() => const SizedBox.shrink(),
+          },
+        ],
+      ),
+    );
+  }
+}
+
+class _IndexProgressNotifier extends Notifier<IndexProgress> {
+  @override
+  IndexProgress build() {
+    final indexer = ref.watch(journalIndexerProvider);
+    void sync() => state = indexer.value;
+    indexer.addListener(sync);
+    ref.onDispose(() => indexer.removeListener(sync));
+    return indexer.value;
+  }
+}
+
+final _indexProgressProvider =
+    NotifierProvider<_IndexProgressNotifier, IndexProgress>(
+      _IndexProgressNotifier.new,
+    );
